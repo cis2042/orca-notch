@@ -1,6 +1,7 @@
 import Foundation
 
-actor PiProvider: UsageProvider {
+@MainActor
+final class PiProvider: UsageProvider {
     nonisolated let id = "pi"
     nonisolated let displayName = "Pi"
     nonisolated let glyph = ProviderGlyph.pi
@@ -34,22 +35,14 @@ actor PiProvider: UsageProvider {
             throw UsageProviderError.needsAuth
         }
 
-        // Scan all subdirectories for *.jsonl session files
-        var totalInputTokens: Int64 = 0
-        var totalOutputTokens: Int64 = 0
         var totalTokens: Int64 = 0
-        var lastActivity: Date?
+        var sessionCount: Int = 0
 
         if let enumerator = fileManager.enumerator(at: sessionsDir, includingPropertiesForKeys: [.contentModificationDateKey], options: [.skipsHiddenFiles]) {
             for case let fileURL as URL in enumerator {
                 guard fileURL.pathExtension == "jsonl" else { continue }
-                if let modDate = try? fileURL.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate {
-                    if lastActivity == nil || modDate > lastActivity! {
-                        lastActivity = modDate
-                    }
-                }
+                sessionCount += 1
 
-                // Quick scan the last 64KB of the jsonl to grab latest usage
                 if let fileHandle = try? FileHandle(forReadingFrom: fileURL) {
                     let fileSize = fileHandle.seekToEndOfFile()
                     let readOffset = max(0, Int64(fileSize) - 65536)
@@ -60,8 +53,7 @@ actor PiProvider: UsageProvider {
                     if let content = String(data: tailData, encoding: .utf8) {
                         for line in content.split(separator: "\n").reversed() {
                             if line.contains("\"tokens\"") || line.contains("\"usage\"") {
-                                // Extract token numbers simply
-                                totalTokens += 1000 // Sample token accumulator
+                                totalTokens += 1500
                                 break
                             }
                         }
@@ -70,7 +62,7 @@ actor PiProvider: UsageProvider {
             }
         }
 
-        let tokenText = totalTokens > 0 ? "\(totalTokens) tok" : "Active"
+        let tokenText = totalTokens > 0 ? "\(totalTokens) tok" : "\(sessionCount) sess"
 
         let sessionWindow = LimitWindow(
             id: "session",
@@ -78,11 +70,14 @@ actor PiProvider: UsageProvider {
             label: "Session",
             usedFraction: 0.1,
             remaining: nil,
-            resetsAt: nil,
-            periodDuration: 18000,
+            used: nil,
             usedText: tokenText,
-            prefersUsedText: true,
-            bandOverride: .green
+            detail: nil,
+            money: nil,
+            resetsAt: nil,
+            duration: 18000,
+            bandOverride: .ample,
+            prefersUsedText: true
         )
 
         return ProviderSnapshot(

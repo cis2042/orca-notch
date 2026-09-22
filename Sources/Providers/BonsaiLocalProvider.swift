@@ -54,7 +54,7 @@ final class BonsaiLocalProvider: UsageProvider {
 
         let reading = LocalRuntimeReading(
             models: [model],
-            summary: "Bonsai 2 27B · Metal GPU Active"
+            measuresSpeed: false
         )
 
         return ProviderSnapshot(
